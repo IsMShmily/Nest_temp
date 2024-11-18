@@ -10,13 +10,21 @@ import {
   Headers,
   Query,
   UseFilters,
+  UseGuards,
+  Req,
+  UseInterceptors,
+  ClassSerializerInterceptor,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { ConfigService } from '@nestjs/config';
 import { User } from './user.entity';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import { getUserDto } from './dto/user.dto';
+import { getUserbyIdDto, getUserDto } from './dto/user.dto';
 import { TypormFiletr } from '../filters/typeorm.filter';
+import { CreateUserPipe } from './pipes/create-user/create-user.pipe';
+import { createUserDto } from './dto/create-user.dto';
+import { AdminGuard } from '../guards/admin/admin.guard';
+import { JwtGuard } from 'src/guards/admin/jwt.guard';
 
 @Controller('user')
 @UseFilters(new TypormFiletr())
@@ -36,23 +44,29 @@ export class UserController {
   getUsers(@Query() query: getUserDto): any {
     console.log('%c query ：', 'color:red', query);
     return this.userService.findAll(query);
-    // return this.userService.getUsers();
   }
-  @Get('/profile')
-  getUserProfile(@Headers() headers): any {
-    console.log('%c req ：', 'color:red', headers);
 
-    return this.userService.findProfile(2);
+  @Get('/profile')
+  @UseGuards(JwtGuard, AdminGuard)
+  getUserProfile(
+    @Headers() headers,
+    @Query() query: getUserbyIdDto,
+    @Req() req,
+  ): any {
+    return this.userService.findProfile(query.id);
   }
 
   @Post()
-  addUser(@Body() body): any {
-    console.log('%c body ：', 'color:red', body);
-    // todo 解析Body参数
-    const user = { username: 'toimc', password: '123456' } as User;
-    // return this.userService.addUser();
+  @UseInterceptors(ClassSerializerInterceptor)
+  addUser(@Body(CreateUserPipe) body: createUserDto): any {
+    const user = {
+      username: body.userName,
+      password: body.password,
+      roles: body.roles,
+    } as User;
     return this.userService.create(user);
   }
+
   @Patch()
   updateUser(): any {
     // todo 传递参数id

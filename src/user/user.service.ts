@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from './user.entity';
 import { Logs } from '../logs/logs.entity';
 import { getUserDto } from './dto/user.dto';
 import { conditionUtils } from 'src/utils/db.helper';
+import { Roles } from 'src/roles/roles.entity';
+import * as argon2 from 'argon2';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     @InjectRepository(Logs) private readonly logsRepository: Repository<Logs>,
+    @InjectRepository(Roles)
+    private readonly rolesRepository: Repository<Roles>,
   ) {}
 
   findAll(query: getUserDto) {
@@ -63,7 +67,10 @@ export class UserService {
   }
 
   find(username: string) {
-    return this.userRepository.findOne({ where: { username } });
+    return this.userRepository.findOne({
+      where: { username },
+      relations: ['roles'],
+    });
   }
 
   findOne(id: number) {
@@ -71,7 +78,21 @@ export class UserService {
   }
 
   async create(user: User) {
+    if (!user.roles) {
+      const role = await this.rolesRepository.findOne({
+        where: { id: 2 },
+      });
+      user.roles = [role];
+    }
+    if (user.roles instanceof Array && typeof user.roles[0] === 'number') {
+      user.roles = await this.rolesRepository.find({
+        where: {
+          id: In(user.roles),
+        },
+      });
+    }
     const userTmp = await this.userRepository.create(user);
+    userTmp.password = await argon2.hash(userTmp.password);
     return this.userRepository.save(userTmp);
   }
 
